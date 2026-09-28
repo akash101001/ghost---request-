@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GHOST REQUEST — shielded payment request</title>
+  <style>
+    :root {
+      --bg: #050805;
+      --fg: #b6f5b0;
+      --dim: #6f9a6c;
+      --line: #1d3b1c;
+      --warn: #e6d37a;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top, #0b160b, var(--bg) 45%);
+      color: var(--fg);
+      min-height: 100vh;
+    }
+    .scanlines {
+      pointer-events: none;
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,.12) 2px 3px);
+    }
+    header, footer, main { position: relative; z-index: 1; }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 22px; border-bottom: 1px solid var(--line); gap: 12px;
+    }
+    .brand { letter-spacing: .12em; font-weight: 700; }
+    .brand small { display: block; color: var(--dim); letter-spacing: .08em; margin-top: 4px; }
+    .dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #3dff6a; box-shadow: 0 0 10px #3dff6a; margin-right: 8px;
+    }
+    .meta { color: var(--dim); font-size: 12px; }
+    main { max-width: 860px; margin: 0 auto; padding: 28px 18px 80px; }
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(8, 18, 8, .72);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    h1 { font-size: 22px; margin: 0 0 10px; }
+    h2 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; }
+    .lede, .hint { color: #cfe9cc; line-height: 1.5; }
+    label { display: block; margin: 12px 0; color: var(--dim); font-size: 13px; }
+    input {
+      width: 100%; margin-top: 6px; padding: 10px;
+      background: #030603; color: var(--fg);
+      border: 1px solid #2a4d28;
+    }
+    button {
+      background: #b6f5b0; color: #061006; border: 0;
+      padding: 10px 14px; font-weight: 700; cursor: pointer;
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    ul { padding-left: 18px; line-height: 1.6; color: #d7f3d4; }
+    .mono {
+      word-break: break-all; background: #030603; padding: 10px;
+      border: 1px dashed var(--line); font-size: 12px;
+    }
+    .warn { border-color: #5a4e1e; }
+    .warn h2 { color: var(--warn); }
+    .hidden { display: none; }
+    footer { text-align: center; color: var(--dim); font-size: 12px; padding: 20px; }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      GHOST REQUEST
+      <small>// ZECATHON · SHIELDED PAYMENTS</small>
+    </div>
+    <div class="meta">TESTNET UI · MOCK BROADCAST</div>
+  </header>
+  <main>
+    <section class="panel">
+      <h1>Ask for ZEC without leaking the story.</h1>
+      <p class="lede">
+        Create a payment request. The payer can settle from the shielded pool.
+        This page never stores names, memos, or amounts on a public server.
+      </p>
+      <form id="create-form">
+        <label>Amount (ZEC)
+          <input id="amount" type="number" min="0.0001" step="0.0001" value="0.042" required />
+        </label>
+        <label>Memo (stays off-chain in this demo)
+          <input id="memo" type="text" maxlength="80" placeholder="coffee / invoice-19 / rent share" />
+        </label>
+        <label>Your shielded address (paste or use sample)
+          <input id="addr" type="text" spellcheck="false" placeholder="u1…" />
+        </label>
+        <div class="row">
+          <button type="button" id="sample-addr">Use sample UA</button>
+          <button type="submit">Generate request</button>
+        </div>
+      </form>
+    </section>
+    <section class="panel hidden" id="result">
+      <h2>Shareable page link (hash only)</h2>
+      <p class="mono" id="link"></p>
+      <h2>ZIP-321 payment URI (real format)</h2>
+      <p class="mono" id="zip321"></p>
+      <h2>Decoded locally</h2>
+      <pre class="mono" id="decoded"></pre>
+      <div class="row">
+        <button type="button" id="copy-link">Copy page link</button>
+        <button type="button" id="copy-uri">Copy ZIP-321 URI</button>
+        <button type="button" id="pay-mock">Simulate shielded pay</button>
+      </div>
+      <p class="hint" id="pay-status"></p>
+    </section>
+    <section class="grid">
+      <article class="panel">
+        <h2>What a transparent tx leaks</h2>
+        <ul>
+          <li>Sender address</li>
+          <li>Receiver address</li>
+          <li>Exact amount</li>
+          <li>Time graph / clustering</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h2>What this request hides</h2>
+        <ul>
+          <li>Payer identity (shielded spend)</li>
+          <li>Memo not posted to a backend</li>
+          <li>Amount not written to this site</li>
+          <li>Link is just a local payload</li>
+        </ul>
+      </article>
+    </section>
+    <section class="panel warn">
+      <h2>Real vs mock — read this</h2>
+      <ul>
+        <li><strong>Real:</strong> ZIP-321 URI, hash-only storage, leak comparison UI.</li>
+        <li><strong>Mock:</strong> Simulate pay does not broadcast to Zcash.</li>
+      </ul>
+    </section>
+  </main>
+  <footer>Ghost Request · Zecathon prototype · not a custody wallet</footer>
+  <script>
+    const SAMPLE_UA = "u1test1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+    const $ = (id) => document.getElementById(id);
+    function toBase64Url(str) {
+      const b64 = btoa(unescape(encodeURIComponent(str)));
+      return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+    function buildZip321({ addr, amount, memo }) {
+      const params = [];
+      if (amount !== undefined && amount !== null && amount !== "") {
+        params.push("amount=" + Number(Number(amount).toFixed(8)).toString());
+      }
+      if (memo) params.push("memo=" + toBase64Url(memo));
+      params.push("message=" + encodeURIComponent("Ghost Request · shielded pay"));
+      return "zcash:" + addr + (params.length ? "?" + params.join("&") : "");
+    }
+    function encodeRequest(payload) {
+      return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+    }
+    function decodeRequest(token) {
+      try { return JSON.parse(decodeURIComponent(escape(atob(token)))); }
+      catch { return null; }
+    }
+    function showRequest(payload, pageLink) {
+      $("link").textContent = pageLink;
+      $("zip321").textContent = payload.zip321 || buildZip321(payload);
+      $("decoded").textContent = JSON.stringify({
+        amount_zec: payload.amount,
+        memo: payload.memo || "(none)",
+        address: payload.addr,
+        created: payload.created,
+        stored_on_server: false
+      }, null, 2);
+      $("result").classList.remove("hidden");
+    }
+    $("sample-addr").onclick = () => { $("addr").value = SAMPLE_UA; };
+    $("create-form").onsubmit = (e) => {
+      e.preventDefault();
+      const amount = Number($("amount").value);
+      const memo = $("memo").value.trim();
+      const addr = $("addr").value.trim();
+      if (!addr) { alert("Address empty. Click Use sample UA."); return; }
+      const zip321 = buildZip321({ addr, amount, memo });
+      const payload = { v: 1, asset: "ZEC", amount, memo, addr, zip321, created: new Date().toISOString() };
+      const url = new URL(window.location.href);
+      url.hash = "r=" + encodeRequest(payload);
+      history.replaceState(null, "", url.toString());
+      showRequest(payload, url.toString());
+      $("pay-status").textContent = "Request is only in the URL. Nothing uploaded.";
+    };
+    $("copy-link").onclick = async () => {
+      await navigator.clipboard.writeText($("link").textContent);
+      $("pay-status").textContent = "Page link copied.";
+    };
+    $("copy-uri").onclick = async () => {
+      await navigator.clipboard.writeText($("zip321").textContent);
+      $("pay-status").textContent = "ZIP-321 URI copied.";
+    };
+    $("pay-mock").onclick = () => {
+      $("pay-status").textContent = "MOCK ONLY — no proof sent to Zcash. txid:shielded-mock-" + Math.random().toString(16).slice(2, 10);
+    };
+    if (location.hash.startsWith("#r=")) {
+      const payload = decodeRequest(location.hash.slice(3));
+      if (payload) {
+        showRequest(payload, location.href);
+        $("pay-status").textContent = "Opened request from URL hash.";
+        if (payload.amount) $("amount").value = payload.amount;
+        if (payload.memo) $("memo").value = payload.memo;
+        if (payload.addr) $("addr").value = payload.addr;
+      }
+    }
+  </script>
+</body>
+</html>
